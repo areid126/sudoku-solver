@@ -2,6 +2,11 @@
 import sys
 import math
 
+# Define constant values for the instance variable
+ROW = 0
+COLUMN = 1
+BOX = 2
+
 # Get the name of the file to read in from the commandline
 fileName = "input.csv" # Default input file name
 if(len(sys.argv) > 1):
@@ -107,9 +112,9 @@ def printCandidates():
             
             print(f"[{i}, {j}]: " + line)
 
-
 # Function for filling cells with only one candidate
 def onlyOneCandidate(byStep=False):
+    updated = False
 
     for i in range(9):
         for j in range(9):
@@ -137,15 +142,17 @@ def onlyOneCandidate(byStep=False):
                 # Set the field in the grid
                 grid[i][j] = first
                 updateCandidates(i, j) # Update the candidates
+                updated = True
 
                 # If going step by step return
                 if (byStep):
-                    return
+                    return True
                 
-
-
+    return updated
+                
 # Function for filling cells where the candidate can only go in that cell
 def onlyOneCell(byStep=False):
+    updated = False
 
     # Go number by number looking for places the number can be inserted
     for toFind in range(9):
@@ -182,18 +189,21 @@ def onlyOneCell(byStep=False):
             if (rowCount == 1):
                 grid[i][rowFound] = toFind + 1
                 updateCandidates(i, rowFound)
+                updated = True
+
 
                 if (byStep):
-                    return
+                    return True
 
 
             # If it was found exactly once as a candidate in the column then assign it
             if (colCount == 1):
                 grid[colFound][i] = toFind + 1
                 updateCandidates(colFound, i)
+                updated = True
 
                 if (byStep):
-                    return 
+                    return True
         
         # Loop through every cell looking for it
         for i in range(3):
@@ -219,11 +229,12 @@ def onlyOneCell(byStep=False):
                 if (boxCount == 1):
                     grid[boxFoundRow][boxFoundCol] = toFind + 1
                     updateCandidates(boxFoundRow, boxFoundCol)
+                    updated = True
 
                     if (byStep):
-                        return 
-
-
+                        return True
+                    
+    return updated
 
 # Function for updating the candidates after filling a cell
 def updateCandidates(row, column):
@@ -245,7 +256,6 @@ def updateCandidates(row, column):
         for j in range(3):
 
             candidates[(boxRow*3) + i][(boxColumn*3) + j][value - 1] = False
-
 
 # Function to output the results to a file (which can then be checked for debugging)
 def outputGrid():
@@ -274,6 +284,266 @@ def outputGrid():
     with open("output.csv", "w") as f:
         f.write(output)
 
+def hiddenPairs(instance, byStep=False):
+
+    # Exit if the function is not called for a valid instance
+    if instance != ROW and instance != COLUMN and instance != BOX:
+        return False
+
+    # Loop through every box/row/column
+    for i in range(9):
+
+        # The list of all possible combinations of candidates in the box/row/column
+        combinations = []
+        # Set the first index to be the index of no candidates
+        combinations.append({
+            "candidates": 0,    # The number of candidates being counted in
+            "cells": [False]*9  # The number of cells that list of candidates appears in
+            }) 
+        
+        # Whether a hidden pair has been found in this box (initially false)
+        found = False
+
+        # Loop through all the possible candidates
+        for j in range(9):
+            
+            # If a pair has already been found in this box/row/column then break
+            if found:
+                break
+
+            currentCells = [False]*9
+
+            # Get the cells this candidate appears in
+            for k in range(9):
+
+                # If the current value appears as a candidate in a cell and the cell is empty then log it
+                if isCandidate(i, j, k, instance):
+                    currentCells[k] = True
+
+                # If the current candidate appears as a value in the cell then make it a candidate for all cells (which will stop it from being part of a hidden pair)
+                if getValue(i, k, instance) == j+1:
+                    currentCells = [True]*9
+                    break
+
+            print(currentCells)
+
+            # Loop through every possible combination of candidates (that is all all indexes < 2^j)
+            for k in range(int(math.pow(2, j))):
+
+                # Get the current combination
+                currentCombination = combinations[k]
+                # Create a new combination to store the currnet combenation plus the current cell
+                newCombination = [False]*9 
+                # Get the cells that this combination of candidates appears in
+                cellCount = getNewCombination(currentCombination, currentCells, newCombination)
+
+                # Store this information in the correct index
+                combinations.append({"candidates": currentCombination["candidates"] + 1, "cells": newCombination}) 
+                
+                # Check if a hidden pair has been identified
+                # This means there are the same number of combined possible cells for the candidates as there are candidates
+                if(currentCombination["candidates"] + 1 == cellCount and cellCount > 0):
+
+                    # Reveal the hidden pair
+                    revealHiddenPair(i, newCombination, k+math.pow(2, j), instance)
+
+                    # Update the found value to indicate a hidden pair has been found
+                    found = True
+                    
+                    # Exit if going by step
+                    if byStep:
+                        return True
+                    
+                    # Exit the loop as all cached information will now be incorrect
+                    break 
+    
+    # Return whether a candidate was found
+    return found
+
+def revealHiddenPair(i, newCombination, candidateIndex, instance):
+    currentCandidates = getCandidatesFromIndex(candidateIndex)
+
+    # Loop through all the cells in the box/row/column again (the box/column/row is 'i')
+    for t in range(9):
+
+        # If the cell is in the pair
+        if (newCombination[t]):
+
+            # Remove all the candidates that are not in the pair
+            for s in range(9):
+                if(not currentCandidates[s]):
+
+                    # Handle removing candidates from the row
+                    if instance == ROW:
+                        candidates[i][t][s] = False
+                    # Handle removing candidates from the column
+                    if instance == COLUMN:
+                        candidates[t][i][s] = False
+                    # Handle removing candidates from the box
+                    if instance == BOX:
+                        candidates[getCellRow(i, t)][getCellColumn(i, t)][s] = False
+
+def isCandidate(i, j, k, instance):
+    # Get if the cell contains the candidate when checking for a box
+    candidate = candidates[getCellRow(i, k)][getCellColumn(i, k)][j] and grid[getCellRow(i, k)][getCellColumn(i, k)] == " " and instance == BOX
+    # Get if the cell contains the candidate when checking for a row
+    candidate = candidate or (candidates[i][k][j] and grid[i][k] == " " and instance == ROW)
+    # Get if the cell contains the candidate when checking for a column
+    candidate = candidate or (candidates[k][i][j] and grid[k][i] == " " and instance == COLUMN)
+
+    return candidate
+
+def getValue(i, k, instance):
+    # Get the current candidate of the cell
+    value = " "
+    if instance == ROW: # If checking a row
+        value = grid[i][k]
+    if instance == COLUMN: # If checking a column
+        value = grid[k][i]
+    if instance == BOX: # If checking a box
+        value = grid[getCellRow(i, k)][getCellColumn(i, k)]
+
+    return value
+
+def getNewCombination(currentCombination, currentCells, newCombination):
+
+    # Count the number of possible cells the candidate can appear in
+    cellCount = 0
+
+    # Create the new combination by looping through every cell
+    for t in range(9):
+
+        # If the cell is contained in either the old combination or the current candidate list then set it to true
+        newCombination[t] = currentCombination["cells"][t] or currentCells[t]
+
+        # If a cell is in the combination then add to the count of all cells in the combination
+        if newCombination[t]:
+            cellCount += 1
+
+    return cellCount
+
+# Function for identifying naked pairs within boxes
+def nakedPairs():
+
+    # Loop through every box
+    for i in range(9):
+
+        # The list of all possible combinations of cells in the box
+        combinations = []
+        # Set the first index to be the index of no cells
+        combinations.append({
+            "cells": 0,             # How many cells are in the combination
+            "candidates": [False]*9 # Whether a candidate is present in the combination of cells
+            }) 
+        
+        # Whether a naked pair has been found in this box (initially false)
+        found = False
+
+        # Loop through all the cells in the box
+        for j in range(9):
+            
+            # If a value has already been found in this box then break
+            if found:
+                break
+
+            # Loop through every possible combination of cells (that is all all indexes < 2^j)
+            for k in range(int(math.pow(2, j))):
+
+                # Get the current combination of cells
+                currentCombination = combinations[k]
+                # Create a new combination to store the current combination and the current cell
+                newCombination = [False]*9 
+                # Couter to count the number of candidates there are between all the cells in the combination
+                candidateCount = 0
+
+                # Create the new combination
+                for t in range(9):
+                    # If the cell already has a value, then make all the candidates true to avoid adding it to a hidden pair
+                    newCombination[t] = currentCombination["candidates"][t] or candidates[getCellRow(i, j)][getCellColumn(i, j)][t] or grid[getCellRow(i, j)][getCellColumn(i, j)] != " "
+                    
+                    # Count the number of candidates in the combination of cells
+                    if newCombination[t]:
+                        candidateCount += 1
+
+                # Store this information in the correct index
+                combinations.append({"cells": currentCombination["cells"] + 1, "candidates": newCombination}) 
+                
+                # Check if a pair has been identified (A pair means there are the same number of candidates for cells as there are cells)
+                if(currentCombination["cells"] + 1 == candidateCount and candidateCount > 0):
+
+                    print("Identified a naked pair")
+
+                    # If a pair has been identified them remove all the candidates in the combination of cells from all other cells
+                    currentCells = getCandidatesFromIndex(k+math.pow(2, j))
+
+                    # Loop through all the cells in the box again
+                    for t in range(9):
+
+                        # If the cell is not in the pair
+                        if (not currentCells[t]):
+
+                            # Remove all the candidates that are in the pair
+                            for s in range(9):
+                                if(newCombination[s]):
+                                    candidates[getCellRow(i, t)][getCellColumn(i, t)][s] = False
+
+
+                    # Indicate that a pair has been found
+                    found = True
+                    break
+
+    # Return if something was found
+    return found
+
+def getIndexFromCandidates(present):
+
+    # If the list does not contain the correct number of elements then return -1 (to indicate error)
+    if (len(present) != 9):
+        return -1
+    
+    index = 0
+    for i in range(9):
+
+        # If the value is present then add to the index
+        if(present[i]):
+            index += math.pow(2, 8-i)
+
+    return index
+
+def getCandidatesFromIndex(index):
+
+    # Return an empty list if the index is out of range
+    if (index < 0 or index > 512):
+        return []
+    
+    output = [False]*9
+
+    # Construct the list of indexes by dividing by powers of 2
+    for i in range(9)[::-1]:
+
+        # If the index divides by the power of nine, update the index value and the output
+        if(index >= math.pow(2, i)):
+            index -= math.pow(2, i)
+            output[i] = True # Update the value to be present in the array
+
+    return output
+
+# Function to turn a box and cell combination into indexes
+def getCellRow(box, cell):
+
+    boxRow = math.floor((box)/3)
+    cellRow = math.floor((cell)/3)
+
+    return (boxRow*3) + cellRow
+
+def getCellColumn(box, cell):
+
+
+    boxColumn = (box) % 3
+    cellColumn = (cell) % 3
+
+    return (boxColumn * 3) + cellColumn
+
 
 # Make a printer for the board
 printBoard = makeBoardPrinter()
@@ -282,4 +552,6 @@ printBoard = makeBoardPrinter()
 printBoard(grid)
 
 candidates = setUpCandidates()
+
+# Output all the possible candidates
 outputGrid()
