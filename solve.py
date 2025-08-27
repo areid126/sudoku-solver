@@ -150,6 +150,73 @@ def onlyOneCandidate(byStep=False):
                 
     return updated
                 
+def newOnlyOneCell(byStep=False):
+    updated = False
+
+    # Loop through every candidate to see if there is somewhere it can be inserted
+    for toFind in range(9):
+
+        # Loop through every column/row/box, looking for the value as a candidate
+        for i in range(9):
+            count = [0]*3
+            found = [-1]*3
+
+            # Loop through every cell in the column/row/box
+            for j in range(9):
+                
+                # If the value already exists in the row, set the count to a number higher than 1
+                if (grid[i][j] == toFind + 1):
+                    count[ROW] = 10
+
+                if (grid[j][i] == toFind + 1):
+                    count[COLUMN] = 10
+
+                if (grid[getCellRow(i, j)][getCellColumn(i, j)] == toFind + 1):
+                    count[BOX] = 10
+
+                # Check if it is a candidate in the column/box/row
+                if (grid[i][j] == " " and candidates[i][j][toFind]):
+                    count[ROW] += 1
+                    found[ROW] = j
+                
+                if (grid[j][i] == " " and candidates[j][i][toFind]):
+                    count[COLUMN] += 1
+                    found[COLUMN] = j
+
+                if (grid[getCellRow(i, j)][getCellColumn(i, j)] == " " and candidates[getCellRow(i, j)][getCellColumn(i, j)][toFind]):
+                    count[BOX] += 1
+                    found[BOX] = j
+
+
+            # If it was found exactly once as a candidate in the row then assign it
+            if (count[ROW] == 1):
+                grid[i][found[ROW]] = toFind + 1
+                updateCandidates(i, found[ROW])
+                updated = True
+
+                if (byStep):
+                    return True
+
+            # If it was found exactly once as a candidate in the column then assign it
+            if (count[COLUMN] == 1):
+                grid[found[COLUMN]][i] = toFind + 1
+                updateCandidates(found[COLUMN], i)
+                updated = True
+
+                if (byStep):
+                    return True
+                
+            # If it was found exactly once as a candidate in the box then assign it
+            if (count[BOX] == 1):
+                grid[getCellRow(i, found[BOX])][getCellColumn(i, found[BOX])] = toFind + 1
+                updateCandidates(getCellRow(i, found[BOX]), getCellColumn(i, found[BOX]))
+                updated = True
+
+                if (byStep):
+                    return True
+                    
+    return updated
+
 # Function for filling cells where the candidate can only go in that cell
 def onlyOneCell(byStep=False):
     updated = False
@@ -545,6 +612,118 @@ def getCellColumn(box, cell):
     return (boxColumn * 3) + cellColumn
 
 
+# Functions for backtracking to solve any sudoku
+def checkValid():
+
+    # Loop through every row/column/box
+    for i in range(9):
+
+        # Define a list of values that have appeared in that row/column/box
+        rowValues = [False]*9
+        columnValues = [False]*9
+        boxValues = [False]*9
+
+
+        # Loop through every cell in the row/column/box
+        for j in range(9):
+            
+            # If there is a value in the row then mark it as true
+            if grid[i][j] != " ":
+
+                # If the value already exists in the row then return, otherwise mark it as being in the row
+                if rowValues[grid[i][j] - 1]:
+                    return False
+                else:
+                    rowValues[grid[i][j] - 1] = True
+
+            # If there is a value in the column then mark it as true
+            if grid[j][i] != " ":
+
+                # If the value already exists in the column then return, otherwise mark it as being in the column
+                if columnValues[grid[j][i] - 1]:
+                    return False
+                else:
+                    columnValues[grid[j][i] - 1] = True
+
+            # If there is a value in the box then mark it as true
+            if grid[getCellRow(i, j)][getCellColumn(i, j)] != " ":
+
+                # If the value already exists in the box then return, otherwise mark it as being in the box
+                if boxValues[grid[getCellRow(i, j)][getCellColumn(i, j)] - 1]:
+                    return False
+                else:
+                    boxValues[grid[getCellRow(i, j)][getCellColumn(i, j)] - 1] = True
+
+    # If the loop exits then every row and column is valid, so the board is valid
+    return True
+
+# Function for checking if an addition is valid for a row/column
+def checkValidCell(row, column):
+    value = grid[row][column]
+    if value == " ":
+        return True # a blank cell is always valid
+    
+    # Get the box the cell is in
+    box = math.floor(column/3) + (math.floor(row/3)*3)
+    
+    # Loop through the row/column/box
+    for i in range(9):
+
+        if grid[row][i] == value and i != column:
+            return False
+        
+        if grid[i][column] == value and i != row:
+            return False
+        
+        if grid[getCellRow(box, i)][getCellColumn(box, i)] == value and getCellRow(box, i) != row and getCellColumn(box, i) != column:
+            return False
+        
+    # If the loop exits then the cell has a valid value
+    return True
+    
+
+def backtrack():
+
+    # Set up the grid to track guesses
+    guesses = []
+    for i in range(9):
+        guesses.append([False]*9)
+        
+    # Begin the recursion
+    return backtrackStep(0, 0, guesses)
+
+
+# Function for backtracking to solve puzzles the other rules will not solve
+def backtrackStep(i, j, guesses):
+
+    # If the end of the grid has been reached return true (as the board is valid for all previous cells)
+    if (i > 8 or j > 8):
+        return True
+    
+    # If the cell already has a value call the function for the next cell
+    if (not guesses[i][j] and grid[i][j] != " "):
+        return backtrackStep(i if (j < 8) else i + 1, j+1 if (j < 8) else 0, guesses)
+    
+    # Try to put the numbers into the board
+    for k in range(9):
+
+        # Assign the guessed value
+        grid[i][j] = k + 1
+
+        # Check if the guessed value is correct
+        if checkValidCell(i, j):
+
+            # Fill in the next cell
+            if backtrackStep(i if (j < 8) else i + 1, j+1 if (j < 8) else 0, guesses):
+                return True
+            
+        # If the guessed value was incorrect then reset the value
+        grid[i][j] = " "
+    
+    # If the loop is exited then there is no guessed value that fits so the program needs to backtrack
+    return False
+
+
 # Make a printer for the board
 printBoard = makeBoardPrinter()
 
@@ -552,6 +731,9 @@ printBoard = makeBoardPrinter()
 printBoard(grid)
 
 candidates = setUpCandidates()
+
+
+printBoard(grid)
 
 # Output all the possible candidates
 outputGrid()
