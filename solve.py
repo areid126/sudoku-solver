@@ -12,6 +12,11 @@ fileName = "input.csv" # Default input file name
 if(len(sys.argv) > 1):
     fileName = sys.argv[1]
 
+# Get if the user wants to solve the puzzle step by step
+runByStep = False
+if(len(sys.argv) > 2 and sys.argv[2] == "-s"):
+    runByStep = True
+
 # Read in the file
 lines = [] # Array to read the file into
 try:
@@ -149,8 +154,9 @@ def onlyOneCandidate(byStep=False):
                     return True
                 
     return updated
-                
-def newOnlyOneCell(byStep=False):
+
+# Function for filling in candidates that only appear in one cell   
+def onlyOneCell(byStep=False):
     updated = False
 
     # Loop through every candidate to see if there is somewhere it can be inserted
@@ -217,92 +223,6 @@ def newOnlyOneCell(byStep=False):
                     
     return updated
 
-# Function for filling cells where the candidate can only go in that cell
-def onlyOneCell(byStep=False):
-    updated = False
-
-    # Go number by number looking for places the number can be inserted
-    for toFind in range(9):
-
-        # Loop through every column and row, looking for the value as a candidate
-        for i in range(9):
-
-            colCount = 0
-            rowCount = 0
-            colFound = -1
-            rowFound = -1
-
-            for j in range(9):
-
-                # If it already appears in the row or the column, set the count to be large
-                if (grid[i][j] == toFind + 1):
-                    rowCount = 10
-
-                if (grid[j][i] == toFind + 1):
-                    colCount = 10
-
-                # Check if it is a candidate for the cell in the column
-                if (grid[i][j] == " " and candidates[i][j][toFind]):
-                    rowCount += 1
-                    rowFound = j
-                
-                # Check if it is a condidate for the cell in the column
-                if (grid[j][i] == " " and candidates[j][i][toFind]):
-                    colCount += 1
-                    colFound = j
-
-
-            # If it was found exactly once as a candidate in the row then assign it
-            if (rowCount == 1):
-                grid[i][rowFound] = toFind + 1
-                updateCandidates(i, rowFound)
-                updated = True
-
-
-                if (byStep):
-                    return True
-
-
-            # If it was found exactly once as a candidate in the column then assign it
-            if (colCount == 1):
-                grid[colFound][i] = toFind + 1
-                updateCandidates(colFound, i)
-                updated = True
-
-                if (byStep):
-                    return True
-        
-        # Loop through every cell looking for it
-        for i in range(3):
-            for j in range(3):
-
-                boxCount = 0
-                boxFoundCol = -1
-                boxFoundRow = -1
-
-                for k in range(3):
-                    for t in range(3):
-
-                        if (grid[(i*3) + k][(j*3) + t] == toFind + 1):
-                            boxCount = 10
-
-                        # Check if it is a candidate for the cell in the column
-                        if (grid[(i*3) + k][(j*3) + t] == " " and candidates[(i*3) + k][(j*3) + t][toFind]):
-                            boxCount += 1
-                            boxFoundRow = (i*3) + k
-                            boxFoundCol = (j*3) + t
-
-
-                if (boxCount == 1):
-                    grid[boxFoundRow][boxFoundCol] = toFind + 1
-                    updateCandidates(boxFoundRow, boxFoundCol)
-                    updated = True
-
-                    if (byStep):
-                        return True
-                    
-    return updated
-
 # Function for updating the candidates after filling a cell
 def updateCandidates(row, column):
     value = grid[row][column]
@@ -351,11 +271,14 @@ def outputGrid():
     with open("output.csv", "w") as f:
         f.write(output)
 
+# Function for identifying hidden pairs
 def hiddenPairs(instance, byStep=False):
 
     # Exit if the function is not called for a valid instance
     if instance != ROW and instance != COLUMN and instance != BOX:
         return False
+    
+    updated = False
 
     # Loop through every box/row/column
     for i in range(9):
@@ -367,6 +290,16 @@ def hiddenPairs(instance, byStep=False):
             "candidates": 0,    # The number of candidates being counted in
             "cells": [False]*9  # The number of cells that list of candidates appears in
             }) 
+        
+        # Count how many empty cells there are
+        empty = 0
+        for j in range(9):
+            if instance == ROW and grid[i][j] == " ":
+                empty += 1
+            if instance == COLUMN and grid[j][i] == " ":
+                empty += 1
+            if instance == BOX and grid[getCellRow(i, j)][getCellColumn(i, j)] == " ":
+                empty += 1
         
         # Whether a hidden pair has been found in this box (initially false)
         found = False
@@ -392,8 +325,6 @@ def hiddenPairs(instance, byStep=False):
                     currentCells = [True]*9
                     break
 
-            print(currentCells)
-
             # Loop through every possible combination of candidates (that is all all indexes < 2^j)
             for k in range(int(math.pow(2, j))):
 
@@ -409,26 +340,32 @@ def hiddenPairs(instance, byStep=False):
                 
                 # Check if a hidden pair has been identified
                 # This means there are the same number of combined possible cells for the candidates as there are candidates
-                if(currentCombination["candidates"] + 1 == cellCount and cellCount > 0):
+                # Do not count a pair if it contains the same number of cells as there are empty cells
+                if(currentCombination["candidates"] + 1 == cellCount and cellCount > 0 and cellCount < empty):
 
-                    # Reveal the hidden pair
-                    revealHiddenPair(i, newCombination, k+math.pow(2, j), instance)
+                    # Reveal the hidden pair 
+                    # Only consider a pair to be found if the state of the board changes
+                    if revealHiddenPair(i, newCombination, k+math.pow(2, j), instance):
 
-                    # Update the found value to indicate a hidden pair has been found
-                    found = True
-                    
-                    # Exit if going by step
-                    if byStep:
-                        return True
-                    
-                    # Exit the loop as all cached information will now be incorrect
-                    break 
+                        found = True
+                        updated = True
+                        
+                        # Exit if going by step
+                        if byStep:
+                            return True
+                        
+                        # Exit the loop as all cached information will now be incorrect
+                        break 
     
     # Return whether a candidate was found
-    return found
+    return updated
 
+# Returns true if the state of the board changed and false if not
 def revealHiddenPair(i, newCombination, candidateIndex, instance):
     currentCandidates = getCandidatesFromIndex(candidateIndex)
+
+    # Store whether anything changed
+    updated = False
 
     # Loop through all the cells in the box/row/column again (the box/column/row is 'i')
     for t in range(9):
@@ -442,13 +379,22 @@ def revealHiddenPair(i, newCombination, candidateIndex, instance):
 
                     # Handle removing candidates from the row
                     if instance == ROW:
+                        # If it has already been updated, or the current cell is true (and so will have its value updated)
+                        updated = updated or candidates[i][t][s]
                         candidates[i][t][s] = False
                     # Handle removing candidates from the column
                     if instance == COLUMN:
+                        # If it has already been updated, or the current cell is true (and so will have its value updated)
+                        updated = updated or candidates[t][i][s]
                         candidates[t][i][s] = False
                     # Handle removing candidates from the box
                     if instance == BOX:
+                        # If it has already been updated, or the current cell is true (and so will have its value updated)
+                        updated = updated or candidates[getCellRow(i, t)][getCellColumn(i, t)][s]
                         candidates[getCellRow(i, t)][getCellColumn(i, t)][s] = False
+
+
+    return updated
 
 def isCandidate(i, j, k, instance):
     # Get if the cell contains the candidate when checking for a box
@@ -611,7 +557,6 @@ def getCellColumn(box, cell):
 
     return (boxColumn * 3) + cellColumn
 
-
 # Functions for backtracking to solve any sudoku
 def checkValid():
 
@@ -681,7 +626,6 @@ def checkValidCell(row, column):
     # If the loop exits then the cell has a valid value
     return True
     
-
 def backtrack():
 
     # Set up the grid to track guesses
@@ -691,7 +635,6 @@ def backtrack():
         
     # Begin the recursion
     return backtrackStep(0, 0, guesses)
-
 
 # Function for backtracking to solve puzzles the other rules will not solve
 def backtrackStep(i, j, guesses):
@@ -723,17 +666,113 @@ def backtrackStep(i, j, guesses):
     # If the loop is exited then there is no guessed value that fits so the program needs to backtrack
     return False
 
+# Function to determine if the puzzle has been solved
+def isSolved():
+    for i in range(9):
+        for j in range(9):
+            if grid[i][j] == " ":
+                return False
+            
+    return True
 
-# Make a printer for the board
-printBoard = makeBoardPrinter()
+# Function to solve the input sudoku
+def solve(byStep):
+    
+    printBoard = makeBoardPrinter() # Make a printer for the board
+    printBoard(grid) # Print the board
 
-# Print the board
-printBoard(grid)
+    # If not going by step, solve the sudoku and output the solution
+    if not byStep:
+        solveFull(printBoard)
+    
+    # If going by step, solve the sudoku step by step, printing the results at each stage
+    else:
+        solveByStep(printBoard)
+            
 
+def solveByStep(printBoard):
+    while(not isSolved()):
+
+        print("Would you like to see the next step in the solution? (Y-N)")
+        ans = input()
+
+        # Exit if the user would not like to see any more of the solution
+        if (ans != "y" and ans != "Y"):
+            return
+        
+        # If the user would like to see more of the solution then get the answer step by step
+        cont = onlyOneCell(True) or onlyOneCandidate(True)
+        hidden = False
+
+        # If unable to fill in a cell, update the candidates
+        if not cont:
+            hidden = hiddenPairs(ROW, True) or hiddenPairs(COLUMN, True) or hiddenPairs(BOX, True)
+            if (hidden):
+                cont = True
+
+        # Return if the sudoku is deemed invalid
+        if not checkValid():
+            print("Error: Sudoku does not have a valid solution")
+            return
+        
+        # Is unable to solve the sudoku by step, exit with an error message
+        if not cont:
+            outputGrid() # Output the candidates for testing purposes
+            print("Unable to solve the sudoku by step any further.")
+            print("Would you like to see the full solution? (Y-N)")
+            ans = input()
+
+            # Exit if the user would not like to see any more of the solution
+            if (ans == "y" or ans == "Y"):
+                if backtrack():
+                    printBoard(grid)
+                else:
+                    print("Error: Sudoku does not have a valid solution")
+
+            return
+        
+        # If only able to continue by updating candidates
+        if hidden:
+            outputGrid()
+            print("Candidate values were updated. See new candidates in output.csv")
+
+        else:
+            # Print the new board to the user
+            printBoard(grid)
+            
+
+def solveFull(printBoard):
+
+    while(onlyOneCell() or onlyOneCandidate() or hiddenPairs(ROW) or hiddenPairs(COLUMN) or hiddenPairs(BOX)):
+        continue
+
+    solved = isSolved()
+
+    # If the puzzle is not solved, but still appears solvable then backtrack to solve it
+    if(not solved and checkValid()):
+
+        # If backtracking does not solve it print an error message
+        if not backtrack():
+            print("Error: Sudoku does not have a valid solution")
+            return
+
+    # If the sudoku is not in a valid state then print an error message
+    elif not solved:
+        print("Error: Sudoku does not have a valid solution")
+        return
+    
+    # If the sudoku is solved and is valid then print the solution
+    if checkValid():
+        printBoard(grid)
+        return
+    
+    # Otherwise print an error message, as the sudoku does not have a valid solution
+    else:
+        print("Error: Sudoku does not have a valid solution")
+        return
+            
+
+# Set up the candidates for the board
 candidates = setUpCandidates()
-
-
-printBoard(grid)
-
-# Output all the possible candidates
-outputGrid()
+# Solve the sudoku
+solve(runByStep)
