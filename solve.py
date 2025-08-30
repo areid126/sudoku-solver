@@ -8,41 +8,63 @@ COLUMN = 1
 BOX = 2
 
 # Get the name of the file to read in from the commandline
-fileName = "input.csv" # Default input file name
-if(len(sys.argv) > 1):
-    fileName = sys.argv[1]
-
-# Get if the user wants to solve the puzzle step by step
-runByStep = False
-if(len(sys.argv) > 2 and sys.argv[2] == "-s"):
-    runByStep = True
-
-# Read in the file
-lines = [] # Array to read the file into
-try:
-    file = open(fileName, "r")
-    lines = file.readlines() # Gets an array of the whole file
-except:
-    print("Error: could not read file", fileName)
+if(len(sys.argv) < 1):
+    print("Usage: python solve.py <fileName>")
     sys.exit()
 
-grid = [] # Array to store the read in board
+# Get if the user wants to solve the puzzle step by step
+runByStep = len(sys.argv) > 2 and sys.argv[2] == "-s"
 
-# Process the input file
-for line in lines:
-    parts = line.split(",") # Split the line into parts
+# Function for reading in the sudoku
+def readInSudoku(fileName):
+    
+    # Read in the file
+    lines = [] # Array to read the file into
+    try:
+        file = open(fileName, "r", encoding='utf-8-sig')
+        lines = file.readlines() # Gets an array of the whole file
+    except:
+        print("Error: could not read file", fileName)
+        sys.exit()
 
-    row = []
-    # Read the parts into the array
-    for part in parts:
-        if(part.isdigit()):
-            row.append(int(part))
-        elif(part == ""):
-            row.append(" ") # Use ' ' to represent empty cells
-        elif(part != "\n"): # Do nothing if it is the end of the line
-            print("Invalid input format")
+    if len(lines) < 9:
+        print("Error: invalid input format")
+        sys.exit()
 
-    grid.append(row)
+    grid = [] # Array to store the read in board
+
+    # Process the input file
+    for i in range(9):
+        parts = lines[i].split(",") # Split the line into parts
+        row = []
+
+        if len(parts) < 9:
+            print("Error: invalid input format")
+            sys.exit()
+
+        # Read the parts into an array
+        for j in range(9):
+            value = 0
+
+            if(parts[j].isdecimal()):
+                value = int(parts[j])
+                # Make sure the value is in range
+                if value < 10 and value > 0:
+                    row.append(value)
+                # If it is out of range then error
+                else:
+                    print(f"Error: Invalid input '{value}' is out of range (1-9)")
+                    sys.exit()
+            elif(parts[j] == ""):
+                row.append(" ") # Use ' ' to represent empty cells
+            else: # If it is not a valid character then error
+                print(f"Error: Invalid input '{parts[j]}' is not a number (1-9)")
+                sys.exit()
+        
+        grid.append(row)
+
+
+    return grid
 
 # Print the sudoku from the grid array
 def makeBoardPrinter():
@@ -689,7 +711,6 @@ def solve(byStep):
     else:
         solveByStep(printBoard)
             
-
 def solveByStep(printBoard):
     while(not isSolved()):
 
@@ -740,7 +761,6 @@ def solveByStep(printBoard):
             # Print the new board to the user
             printBoard(grid)
             
-
 def solveFull(printBoard):
 
     while(onlyOneCell() or onlyOneCandidate() or hiddenPairs(ROW) or hiddenPairs(COLUMN) or hiddenPairs(BOX)):
@@ -770,8 +790,9 @@ def solveFull(printBoard):
     else:
         print("Error: Sudoku does not have a valid solution")
         return
-            
 
+# Read in the board
+grid = readInSudoku(sys.argv[1])
 # Set up the candidates for the board
 candidates = setUpCandidates()
 # Solve the sudoku
